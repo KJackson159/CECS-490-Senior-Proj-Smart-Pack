@@ -58,7 +58,7 @@ HX711 scale; // HX711 library instance for future reference
 Adafruit_BME280 bme; // BME280 library instance for future reference
 
 // Value calculated from calibration of HX711 with known weights:
-#define CALIBRATION_FACTOR 411
+#define CALIBRATION_FACTOR 449
 
 // Initialize variables
 int weight;
@@ -101,13 +101,16 @@ void loop() {
     weight = round(scale.get_units()); // Gets one single scale reading
     temperature = (1.8 * bme.readTemperature() + 32); // Temperature converted to Fahrenheit
     
-    // Serial Monitor printing weight and temperature values:
-    Serial.println("Weight: ");
-    Serial.println(weight);
+    // Serial Monitor printing weight and temperature values, as well as lock status:
+    Serial.println("\n\nWeight: ");
+    Serial.print(weight);
     Serial.print(" lbs");
-    Serial.println("Temperature: ");
-    Serial.println(temperature);
+    Serial.println("\n\nTemperature: ");
+    Serial.print(1.8 * bme.readTemperature() + 32);
     Serial.print(" *F");
+    Serial.println("\n\nLock Status: ");
+    Serial.print("Locked.");
+    delay(200);
 
     // ST7735 text color and size:
     tft.setTextColor(ST77XX_WHITE);
@@ -119,18 +122,51 @@ void loop() {
       
       // Displays weight value on ST7735:
       tft.setCursor(0, 0);
-      tft.println("Weight: ");
+      tft.println("Weight:");
       tft.setCursor(20, 10);
       tft.print(weight / 453.592);
       tft.setCursor(40, 10);
       tft.print(" lbs");
+      
+      // Ounces measurement:
+      /*tft.setCursor(20, 20);
+      tft.print(weight / 28.35);
+      tft.setCursor(40, 20);
+      tft.print(" oz");*/
 
-      // Displays temperature value on ST7735:
-      tft.setCursor(0, 30);
-      tft.println("Temperature: ");
-      tft.setCursor(20, 40);
-      tft.print(1.8 * bme.readTemperature() + 32);
-      tft.print(" *F");
+      // Displays temperature value on ST7735 if temperature reaches 120 degrees or higher:
+      if (temperature >= 120) {
+        tft.setCursor(0, 30);
+        tft.println("Temperature:");
+        tft.setCursor(20, 40);
+        tft.print(1.8 * bme.readTemperature() + 32);
+        tft.print(" *F ");
+        tft.setTextColor(ST77XX_BLUE);
+        tft.print("(CAUTION: TOO HOT. LET REST.)"); // Caution message for user that temp. is too hot
+
+        // Displays smart lock status on ST7735:
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(0, 70);
+        tft.println("Lock Status:");
+        tft.setCursor(20, 80);
+        tft.print("Locked.");
+      }
+      
+      // If temperature is at safe value (<= 120 degrees):
+      else {
+        tft.setCursor(0, 30);
+        tft.println("Temperature:");
+        tft.setCursor(20, 40);
+        tft.print(1.8 * bme.readTemperature() + 32);
+        tft.print(" *F");
+
+        // Displays smart lock status on ST7735:
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(0, 60);
+        tft.println("Lock Status:");
+        tft.setCursor(20, 70);
+        tft.print("Locked.");
+      }
     }
     lastTemperature = temperature;
     lastWeight = weight;
