@@ -47,6 +47,7 @@ bool face_recognised = false;
 void app_facenet_main();
 void app_httpserver_init();
 
+/*Processed image structure elements*/
 typedef struct
 {
   uint8_t *image;
@@ -80,6 +81,7 @@ static dl_matrix3du_t *aligned_face = NULL;
 
 httpd_handle_t camera_httpd = NULL;
 
+/*Enumeration of a state machine for the facial recognition status*/
 typedef enum
 {
   START_STREAM,
@@ -87,6 +89,7 @@ typedef enum
   SHOW_FACES,
   START_RECOGNITION,
   START_ENROLL,
+  //States not used for some reason:
   ENROLL_COMPLETE,
   DELETE_ALL,
 } en_fsm_state;
@@ -99,13 +102,18 @@ typedef struct
 
 httpd_resp_value st_name;
 
+/*Setup here for latch lock signal 
+(LATCH_BUTTON INPUT for receiving, SECURELOCK OUTPUT for sending), 
+and the camera on the ESP32-CAM*/
 void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
-
+  //Output signal to the button
   digitalWrite(SECURELOCK, LOW);
   pinMode(SECURELOCK, OUTPUT);
+  //Input to receive signal when button is pressed
+  pinMode(LATCH_BUTTON, INPUT);
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -235,16 +243,20 @@ static esp_err_t delete_all_faces(WebsocketsClient &client)
   client.send("delete_faces");
 }
 
+/*Cases for the state machine based on the internal message received to ESP32-CAM when interacting with webserver
+(Ex: Clicking the "DETECT FACES" button on the webserver will do case 2: send the "detect" message to the ESP32-CAM)*/
 void handle_message(WebsocketsClient &client, WebsocketsMessage msg)
-{
+{ //Case 1
   if (msg.data() == "stream") {
     g_state = START_STREAM;
     client.send("STREAMING");
   }
+  //Case 2
   if (msg.data() == "detect") {
     g_state = START_DETECT;
     client.send("DETECTING");
   }
+  //Case 3
   if (msg.data().substring(0, 8) == "capture:") {
     g_state = START_ENROLL;
     char person[FACE_ID_SAVE_NUMBER * ENROLL_NAME_LEN] = {0,};
@@ -252,22 +264,25 @@ void handle_message(WebsocketsClient &client, WebsocketsMessage msg)
     memcpy(st_name.enroll_name, person, strlen(person) + 1);
     client.send("CAPTURING");
   }
+  //Case 4
   if (msg.data() == "recognise") {
     g_state = START_RECOGNITION;
     client.send("RECOGNISING");
   }
+  //Case 5
   if (msg.data().substring(0, 7) == "remove:") {
     char person[ENROLL_NAME_LEN * FACE_ID_SAVE_NUMBER];
     msg.data().substring(7).toCharArray(person, sizeof(person));
     delete_face_id_in_flash_with_name(&st_face_list, person);
     send_face_list(client); // reset faces in the browser
   }
+  //Case 6
   if (msg.data() == "delete_all") {
     delete_all_faces(client);
   }
 }
 
-//Lock mechanism (Change this with latch lock + button)
+/*Lock mechanism (Changed this for latch lock + button)*/
 void open_door(WebsocketsClient &client) {
   //if (digitalRead(SECURELOCK) == LOW) {
     //digitalWrite(SECURELOCK, HIGH); //close (energise) relay so door unlocks
@@ -277,7 +292,7 @@ void open_door(WebsocketsClient &client) {
   //}
 }
 
-//Main Code
+/*Main Code*/
 void loop() {
   auto client = socket_server.accept();
   client.onMessage(handle_message);
@@ -348,8 +363,27 @@ void loop() {
                 Serial.println("Secure lock off!\nWaiting for user to press luggage button");
                 client.send("secure lock off");
               }
-              //wait for user to press button            
-              while(LATCH_BUTTON == LOW){}
+              //wait for user to press button
+              /*//With timeout sub-feature
+              unsigned long waitingTime = 90000 //1.5-min waiting time until it times out
+              unsigned long startWaitTime = millis()
+              unsigned long currWaitTime = 0
+              while((digitalRead(LATCH_BUTTON) == LOW) && (currWaitTime < waitingTime)){ currWaitTime = millis()-startWaitTime; }
+              //If user took too long to open luggage after successful facial recognition, secure lock will enable again.
+              if(currWaitTime >= waitingTime){
+                digitalWrite(SECURELOCK, LOW);
+                client.send("Secure lock disable timed out. Secure lock back on.");                
+              }
+              //Else, the button has been pressed, and the secure lock signal will turn off (secure lock will enable) 
+              //after 2 seconds from button press.
+              else{
+                //If it has reached X secs, lock the latch again. (X = 2 seconds)
+                open_door(client);
+                while(millis() - interval <= door_opened_millis) {} // current time - face recognised time > X secs
+                digitalWrite(SECURELOCK, LOW); //open relay
+                client.send(recognised_message);
+              }*/
+              while(digitalRead(LATCH_BUTTON) == LOW){} //without timeout
               open_door(client);
               //If it has reached X secs, lock the latch again. (X = 2 seconds)
               while(millis() - interval <= door_opened_millis) {} // current time - face recognised time > X secs
@@ -372,7 +406,7 @@ void loop() {
         }
       }
 
-      if (g_state == START_DETECT && millis() - last_detected_millis > 500) { // Detecting but no face detected
+      if (g_state == START_DETECT && millis() - last_detected_millis > 500) { // Detecting but no face detected yet
         client.send("DETECTING");
       }
 
