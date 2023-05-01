@@ -65,6 +65,12 @@ int weight;
 int lastWeight;
 int temperature;
 int lastTemperature;
+int enrollMode = 0;
+int optionMode = 0;
+int faceEnrollDetect = 0;
+int detectFace = 0;
+int lockStatus = 1;
+int unlock = 0;
 
 
 void setup() {
@@ -96,6 +102,60 @@ void setup() {
 }
 
 void loop() {
+  // ST7735 text color and size:
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setTextSize(1);
+
+  // If an enrolled face is detected:
+  if (detectFace == 1) {
+    Serial.println("Hello, [Name]!");
+    tft.setCursor(0, 0);
+    tft.println("Hello, [Name]!"); // LCD displays user's saved name
+    
+    // Enter Option Mode (to unlock Smart Pack):
+    optionMode = 1;
+    if (optionMode == 1) {
+
+      // If user presses unlock button during Option Mode:
+      if (unlock == 1) {
+        optionMode = 0; // Exit Option Mode
+        unlock == 0;
+      }
+
+      // Wait 10 seconds after an enrolled face is detected. If unlock button not pressed, exit Option Mode:
+      delay(10000);
+      optionMode = 0;
+      tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh      
+    }
+    detectFace = 0;
+    tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
+  }
+
+  // If Enroll Face Mode is activated via web app:
+  if (enrollMode == 1) {
+    Serial.println("Enroll Mode");
+    tft.setCursor(0, 0);
+    tft.println("Enroll Mode");
+
+    // If a face is detected during Enroll Mode:
+    if (faceEnrollDetect == 1) {
+      Serial.println("Face enrolled!");
+      tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
+      tft.println("Face enrolled!");
+      delay(5000);
+      enrollMode = 0; // Exit Enroll Mode
+    }
+
+    delay(15000); // Wait 15 seconds to detect a face
+    Serial.println("No face detected.");
+    tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
+    tft.println("No face detected.");
+    delay(5000);
+    enrollMode = 0; // Exit Enroll Mode
+    tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
+  }
+
+  // DEFAULT LCD DISPLAY MODE (Weight, temperature, and lock status display):
   // Non-blocking method to get readings; maximum timeout to wait for HX711 to be initialized/detected:
   if (scale.wait_ready_timeout(200)) {
     weight = round(scale.get_units()); // Gets one single scale reading
@@ -109,8 +169,8 @@ void loop() {
     Serial.print(1.8 * bme.readTemperature() + 32);
     Serial.print(" *F");
     Serial.println("\n\nLock Status: ");
-    Serial.print("Locked.");
-    delay(200);
+    Serial.print(lockStatus);
+    delay(1000);
 
     // ST7735 text color and size:
     tft.setTextColor(ST77XX_WHITE);
@@ -118,6 +178,7 @@ void loop() {
 
     // Update weight and temperature in real-time:
     if ((weight != lastWeight) || (temperature != lastTemperature)){
+      delay(1000);
       tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh with new values
       
       // Displays weight value on ST7735:
@@ -148,8 +209,18 @@ void loop() {
         tft.setTextColor(ST77XX_WHITE);
         tft.setCursor(0, 70);
         tft.println("Lock Status:");
-        tft.setCursor(20, 80);
-        tft.print("Locked.");
+
+        // If Smart Pack is unlocked:
+        if (lockStatus == 0) {
+          tft.setCursor(20, 80);
+          tft.print("Unlocked.");
+        }
+
+        // If Smart Pack is locked:
+        else {
+          tft.setCursor(20, 80);
+          tft.print("Locked.");
+        }
       }
       
       // If temperature is at safe value (<= 120 degrees):
@@ -164,8 +235,18 @@ void loop() {
         tft.setTextColor(ST77XX_WHITE);
         tft.setCursor(0, 60);
         tft.println("Lock Status:");
-        tft.setCursor(20, 70);
-        tft.print("Locked.");
+
+        // If Smart Pack is unlocked:
+        if (lockStatus == 0) {
+          tft.setCursor(20, 70);
+          tft.print("Unlocked.");
+        }
+        
+        // If Smart Pack is locked:
+        else {
+          tft.setCursor(20, 70);
+          tft.print("Locked.");
+        }
       }
     }
     lastTemperature = temperature;
