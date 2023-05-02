@@ -46,6 +46,12 @@
 #define TFT_RST       19  // Reset
 #define TFT_DC         2 
 
+// ESP32 GPIO pins used by latch lock:
+#define SOLENOID 15
+#define Lswitch 17
+int flag = 0;
+int swiValue = 0;
+
 // ESP32 GPIO pins used by HX711:
 const int LOADCELL_DOUT_PIN = 16;
 const int LOADCELL_SCK_PIN = 4;
@@ -58,7 +64,7 @@ HX711 scale; // HX711 library instance for future reference
 Adafruit_BME280 bme; // BME280 library instance for future reference
 
 // Value calculated from calibration of HX711 with known weights:
-#define CALIBRATION_FACTOR 449
+#define CALIBRATION_FACTOR -449
 
 // Initialize variables
 int weight;
@@ -83,6 +89,10 @@ void setup() {
   Serial.println("Initializing the scale...");
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
 
+  // Latch lock setup:
+  pinMode(SOLENOID, OUTPUT);
+  pinMode(Lswitch, INPUT);
+
   // Further initializing of scale:
   scale.set_scale(CALIBRATION_FACTOR);
   scale.tare(); // Resets scale to 0
@@ -106,6 +116,27 @@ void loop() {
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(1);
 
+  // Latch lock setup:
+  swiValue = analogRead(Lswitch);
+  delay(100);
+  //Serial.println(swiValue);
+
+  // Loops lock status to be locked
+  digitalWrite(SOLENOID, LOW);
+
+  if ((digitalRead(Lswitch) == HIGH) && (flag == 0)) {
+    Serial.println("unlocked");
+    flag = 1;
+    delay(5000);
+  }
+
+  if ((digitalRead(Lswitch) == LOW) && (flag == 1)) {
+    Serial.println("locked");
+    flag = 0;
+    delay(1000);
+  } 
+
+  detectFace = 1; // TEST
   // If an enrolled face is detected:
   if (detectFace == 1) {
     Serial.println("Hello, [Name]!");
@@ -115,17 +146,22 @@ void loop() {
     // Enter Option Mode (to unlock Smart Pack):
     optionMode = 1;
     if (optionMode == 1) {
-
+      delay(3000); // Wait 3 seconds before detecting if user presses unlock button
       // If user presses unlock button during Option Mode:
+      //unlock = 1; // TEST
       if (unlock == 1) {
+        lockStatus = 0;
+        digitalWrite(SOLENOID, HIGH);
+        delay(500);
+        lockStatus = 1;
         optionMode = 0; // Exit Option Mode
-        unlock == 0;
+        unlock = 0;
       }
 
-      // Wait 10 seconds after an enrolled face is detected. If unlock button not pressed, exit Option Mode:
-      delay(10000);
-      optionMode = 0;
-      tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh      
+      else {
+        optionMode = 0; // Exit Option Mode
+        tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh 
+      }           
     }
     detectFace = 0;
     tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
@@ -169,7 +205,14 @@ void loop() {
     Serial.print(1.8 * bme.readTemperature() + 32);
     Serial.print(" *F");
     Serial.println("\n\nLock Status: ");
-    Serial.print(lockStatus);
+    // If Smart Pack is unlocked:
+    if (lockStatus == 0) {
+      Serial.print("Unlocked.");
+    }
+    // If Smart Pack is locked:
+    else {
+      Serial.print("Locked.");
+    }
     delay(1000);
 
     // ST7735 text color and size:
@@ -185,7 +228,7 @@ void loop() {
       tft.setCursor(0, 0);
       tft.println("Weight:");
       tft.setCursor(20, 10);
-      tft.print(weight / 453.592);
+      tft.print(weight);
       tft.setCursor(40, 10);
       tft.print(" lbs");
       
