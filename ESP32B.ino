@@ -43,14 +43,17 @@
 #define TFT_CS         5
 #define TFT_RST       19  // Reset
 #define TFT_DC         2 
-#define CALIBRATION_FACTOR -449 // Value calculated from calibration of HX711 with known weights
+
+// Value calculated from calibration of HX711 with known weights:
+#define CALIBRATION_FACTOR -449
+
+// ESPNow
 esp_now_peer_info_t peerInfo;
-#define CHANNEL 1          //ESPNOW
+#define CHANNEL 1
 
 // ESP32 GPIO pins used by latch lock:
 #define SOLENOID 15
 #define Lswitch 17
-int flag = 0;
 int swiValue = 0;
 
 // ESP32 GPIO pins used by HX711:
@@ -64,36 +67,33 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 HX711 scale; // HX711 library instance for future reference
 Adafruit_BME280 bme; // BME280 library instance for future reference
 
-//MAC Address of your receiver 
+// MAC Address of your receiver:
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-// Initialize variables
+// Initialize variables:
 int weight;
 int lastWeight;
 int temperature;
 int lastTemperature;
-int enrollMode = 0;
-int optionMode = 0;
-int faceEnrollDetect = 0;
-int lockStatus = 1;
-int unlock = 0;
+int lockFlag; // Flag communication variable with server
+int exitFlag;
 int send_faceDetected;
 int send_motorControl;
 int receive_faceDetected;
 int receive_motorControl;
 String success;
 
-//define data structure
+// Define data structure (ESPNow):
 typedef struct struct_message{
   int b;
   int c;
 } struct_message;
 
-//create structered data object
+// Create structered data object (ESPNow):
 struct_message send_data;
 struct_message receive_data;
 
-// Init ESP Now with fallback
+// Init ESP Now with fallback:
 void InitESPNow() {
   WiFi.disconnect();
   if (esp_now_init() == ESP_OK) {
@@ -131,14 +131,15 @@ void sendData() {
   //Serial.print("Latitude: "); Serial.println(data.a);
   //Serial.print("Longitude: "); Serial.println(data.b);
 }
-// callback when data is sent from Master to receiver
+
+// Callback when data is sent from Master to Slave:
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-  if (status ==0){
+  if (status == 0) {
     success = "Delivery Success :)";
   }
-  else{
+  else {
     success = "Delivery Fail :(";
   }
     //char macStr[18];
@@ -152,22 +153,27 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void setup() {
   Serial.begin(115200); // Initialize Serial monitor
+
+  // ESPNow setup:
   WiFi.mode(WIFI_STA);
   Serial.println("ESPNow Setup Running");
   InitESPNow();
+
   // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info.
   esp_now_register_recv_cb(OnDataRecv);
-    // Register peer
+
+  // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
   
   // Add peer        
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
+    Serial.println("Failed to add peer.");
     return;
   }
+
   // Once ESPNow is successfully Init,register for Send CB of Trasnmitted packet
   esp_now_register_send_cb(OnDataSent);
 
@@ -186,7 +192,7 @@ void setup() {
   scale.set_scale(CALIBRATION_FACTOR);
   scale.tare(); // Resets scale to 0
 
-  bool status;   // BME280
+  bool status; // BME280
 
   // Initialization/detection of BME280:
   status = bme.begin(0x76);  
@@ -195,10 +201,10 @@ void setup() {
     while (1);
   }
 
-  tft.fillScreen(ST77XX_BLACK);   // Black display
+  tft.fillScreen(ST77XX_BLACK); // Black display
 }
 
-// callback when data is recv
+// Callback when data is received:
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int data_len) {
   memcpy(&receive_data, incomingData, sizeof(receive_data));
   Serial.println("Recv Data: ");
@@ -219,6 +225,7 @@ void loop() {
   send_data.b = send_faceDetected;
   send_data.c = send_motorControl;
   sendData(); 
+
   // ST7735 text color and size:
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(1);
@@ -231,72 +238,51 @@ void loop() {
   // Loops lock status to be locked
   digitalWrite(SOLENOID, LOW);
 
-  if ((digitalRead(Lswitch) == HIGH) && (flag == 0)) {
-    Serial.println("unlocked");
-    flag = 1;
-    delay(5000);
+  if ((digitalRead(Lswitch) == HIGH) && (lockFlag == 0)) {
+    Serial.println("Unlocked.");
+    lockFlag = 1;
   }
 
-  if ((digitalRead(Lswitch) == LOW) && (flag == 1)) {
-    Serial.println("locked");
-    flag = 0;
-    delay(1000);
+  if ((digitalRead(Lswitch) == LOW) && (lockFlag == 1)) {
+    Serial.println("Locked.");
+    lockFlag = 0;
   } 
 
   receive_faceDetected = 1; // TEST
+
   // If an enrolled face is detected:
   if (receive_faceDetected == 1) {
     Serial.println("Hello, [Name]!");
     tft.setCursor(0, 0);
     tft.println("Hello, [Name]!"); // LCD displays user's saved name
     
-    // Enter Option Mode (to unlock Smart Pack):
-    optionMode = 1;
-    if (optionMode == 1) {
-      delay(3000); // Wait 3 seconds before detecting if user presses unlock button
-      // If user presses unlock button during Option Mode:
-      //unlock = 1; // TEST
-      if (unlock == 1) {
-        lockStatus = 0;
+	  // Loop while user is in Menu:
+    while (receive_faceDetected == 1) {
+	
+      // If user presses unlock button in Menu:
+      //lockFlag = 0; // TEST
+      if (lockFlag == 0) {
         digitalWrite(SOLENOID, HIGH);
         delay(500);
-        lockStatus = 1;
-        optionMode = 0; // Exit Option Mode
-        unlock = 0;
+		  
+		    // Display Smart Lock unlocked on LCD:
+		    tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh 
+		    tft.setCursor(20, 80);
+		    tft.setTextSize(2);
+        tft.print("Smart Lock");
+		    tft.setCursor(20, 100);
+		    tft.print("Unlocked!");
+		    delay(3000); // Display unlock text for 3 seconds
+		    lockFlag = 1;
       }
-
-      else {
-        optionMode = 0; // Exit Option Mode
-        tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh 
-      }           
-    }
-    receive_faceDetected = 0;
-    tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
+	  
+	    // Exit Menu when user presses Exit button:
+	    if (exitFlag == 1) {
+	      receive_faceDetected = 0;
+	    }
+	  }
   }
 
-  // // If Enroll Face Mode is activated via web app:
-  // if (enrollMode == 1) {
-  //   Serial.println("Enroll Mode");
-  //   tft.setCursor(0, 0);
-  //   tft.println("Enroll Mode");
-
-  //   // If a face is detected during Enroll Mode:
-  //   if (faceEnrollDetect == 1) {
-  //     Serial.println("Face enrolled!");
-  //     tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
-  //     tft.println("Face enrolled!");
-  //     delay(5000);
-  //     enrollMode = 0; // Exit Enroll Mode
-  //   }
-
-  //   delay(15000); // Wait 15 seconds to detect a face
-  //   Serial.println("No face detected.");
-  //   tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
-  //   tft.println("No face detected.");
-  //   delay(5000);
-  //   enrollMode = 0; // Exit Enroll Mode
-  //   tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
-  // }
 
   // DEFAULT LCD DISPLAY MODE (Weight, temperature, and lock status display):
   // Non-blocking method to get readings; maximum timeout to wait for HX711 to be initialized/detected:
@@ -313,7 +299,7 @@ void loop() {
     Serial.print(" *F");
     Serial.println("\n\nLock Status: ");
     // If Smart Pack is unlocked:
-    if (lockStatus == 0) {
+    if (lockFlag == 0) {
       Serial.print("Unlocked.");
     }
     // If Smart Pack is locked:
@@ -338,6 +324,12 @@ void loop() {
       tft.print(weight);
       tft.setCursor(40, 10);
       tft.print(" lbs");
+      
+      // Ounces measurement:
+      /*tft.setCursor(20, 20);
+      tft.print(weight / 28.35);
+      tft.setCursor(40, 20);
+      tft.print(" oz");*/
 
       // Displays temperature value on ST7735 if temperature reaches 120 degrees or higher:
       if (temperature >= 120) {
@@ -353,18 +345,8 @@ void loop() {
         tft.setTextColor(ST77XX_WHITE);
         tft.setCursor(0, 70);
         tft.println("Lock Status:");
-
-        // If Smart Pack is unlocked:
-        if (lockStatus == 0) {
-          tft.setCursor(20, 80);
-          tft.print("Unlocked.");
-        }
-
-        // If Smart Pack is locked:
-        else {
-          tft.setCursor(20, 80);
-          tft.print("Locked.");
-        }
+		    tft.setCursor(20, 80);
+		    tft.print("Locked.");
       }
       
       // If temperature is at safe value (<= 120 degrees):
@@ -379,18 +361,8 @@ void loop() {
         tft.setTextColor(ST77XX_WHITE);
         tft.setCursor(0, 60);
         tft.println("Lock Status:");
-
-        // If Smart Pack is unlocked:
-        if (lockStatus == 0) {
-          tft.setCursor(20, 70);
-          tft.print("Unlocked.");
-        }
-        
-        // If Smart Pack is locked:
-        else {
-          tft.setCursor(20, 70);
-          tft.print("Locked.");
-        }
+		    tft.setCursor(20, 80);
+		    tft.print("Locked.");
       }
     }
     lastTemperature = temperature;
