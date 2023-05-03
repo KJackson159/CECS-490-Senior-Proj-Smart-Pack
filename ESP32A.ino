@@ -31,7 +31,6 @@
 
 #include <esp_now.h>
 #include <WiFi.h>
-#include <esp_wifi.h> // only for esp_wifi_set_channel()
 #include <TinyGPSPlus.h>
 
 // Global copy of slave
@@ -40,7 +39,7 @@ TinyGPSPlus gps;
 #define CHANNEL 1
 
 //MAC Address of your receiver 
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+uint8_t broadcastAddress[] = {0xCC, 0xDB, 0xA7, 0x51, 0x06, 0x60};
 
 float latitude;
 float longitude;
@@ -80,7 +79,7 @@ void sendData() {
 
   Serial.print("Send Status: ");
   if (result == ESP_OK) {
-    Serial.println("Success");
+    Serial.println("Successful");
   } else if (result == ESP_ERR_ESPNOW_NOT_INIT) {
     // How did we get so far!!
     Serial.println("ESPNOW not Init.");
@@ -95,27 +94,40 @@ void sendData() {
   } else {
     Serial.println("Not sure what happened");
   }
-  //Serial.print("Latitude: "); Serial.println(data.a);
-  //Serial.print("Longitude: "); Serial.println(data.b);
 }
 
 // callback when data is sent from Master to receiver
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-  if (status ==0){
-    success = "Delivery Success :)";
-  }
-  else{
-    success = "Delivery Fail :(";
-  }
-}
-  //char macStr[18];
+// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+//   Serial.print("\r\nLast Packet Send Status:\t");
+//   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+//   if (status ==0){
+//     success = "Delivery Success :)";
+//   }
+//   else{
+//     success = "Delivery Fail :(";
+//   }
+// }
+  //char macStr[18]; //^^goes inside OnDataSent | used to debug
   //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
   //         mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
   //Serial.print("Last Packet Sent to: "); Serial.println(macStr);
   //Serial.print("Last Packet Send Status: "); Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
   //Serial.println(data);
+
+// callback when data is recv 
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int data_len) {
+  memcpy(&receive_data, incomingData, sizeof(receive_data));
+  Serial.println("Data Received:");
+  receive_faceDetected = receive_data.b;
+  receive_motorControl = receive_data.c;
+  Serial.print("Face Detected flag: "); Serial.println(receive_faceDetected);
+  Serial.print("Motor Control flag: "); Serial.println(receive_motorControl);
+  Serial.println( );
+  //char macStr[18];
+  //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+           //mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  //Serial.print("Last Packet Recv from: "); Serial.println(macStr);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -125,10 +137,11 @@ void setup() {
   Serial.println("ESPNow Setup Running");
   InitESPNow();
   // Once ESPNow is successfully Init,register for Send CB of Trasnmitted packet
-  esp_now_register_send_cb(OnDataSent);
+  //esp_now_register_send_cb(OnDataSent);
+
     // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;  
+  peerInfo.channel = 1;  
   peerInfo.encrypt = false;
   
   // Add peer        
@@ -136,23 +149,7 @@ void setup() {
     Serial.println("Failed to add peer");
     return;
   }
-  //Register for a callback function that will be called when data is received
-  esp_now_register_recv_cb(OnDataRecv); 
-}
-
-// callback when data is recv 
-void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int data_len) {
-  memcpy(&receive_data, incomingData, sizeof(receive_data));
-  Serial.println("Data Received:");
-  receive_faceDetected = receive_data.b;
-  receive_motorControl = receive_data.c;
-  Serial.print("Face Detected "); Serial.println(receive_faceDetected);
-  Serial.print("Motor Controls: "); Serial.println(receive_motorControl);
-  Serial.println( );
-  //char macStr[18];
-  //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-           //mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  //Serial.print("Last Packet Recv from: "); Serial.println(macStr);
+  esp_now_register_recv_cb(OnDataRecv);
 }
 
 void loop() {
@@ -174,5 +171,5 @@ void loop() {
   }
 
   // wait for 3seconds to run the logic again
-  delay(3000);
+  delay(5000);
 }
