@@ -28,31 +28,33 @@
          Based on the ESPNOW API, there is no concept of Master and Slave.
          Any devices can act as master or salve.
 */
-
 #include <esp_now.h>
 #include <WiFi.h>
 #include <TinyGPSPlus.h>
+#include <String.h>
 
 // Global copy of slave
 esp_now_peer_info_t peerInfo;
 TinyGPSPlus gps;
-#define CHANNEL 1
+#define CHANNEL 0
 
 //MAC Address of your receiver 
-uint8_t broadcastAddress[] = {0xCC, 0xDB, 0xA7, 0x51, 0x06, 0x60};
+uint8_t broadcastAddressB[] = {0xCC, 0xDB, 0xA7, 0x51, 0x06, 0x60}; //ESP32_B  CC:DB:A7:51:06:60
+uint8_t broadcastAddressC[] = {0xEC, 0x62, 0x60, 0x1C, 0x89, 0x30}; //ESP32_C EC:62:60:1C:89:30
 
 float latitude;
 float longitude;
 int send_faceDetected;
+char send_motorState;
 int send_motorControl;
 int receive_faceDetected;
-int receive_motorControl;
 String success;
 
 //define data structure
 typedef struct struct_message{
-  int b;
-  int c;
+  char myState[32]; //forward, reverse, left, right, stop, and exit
+  int running; //If HIGH, it's in controller mode. Else, do not move motors at all.
+  int faceDetected; //flag used if successful facial recognition
 } struct_message; 
 
 //create structured data object 
@@ -71,57 +73,29 @@ void InitESPNow() {
   }
 }
 
-void sendData() {
-  //data++;
-  const uint8_t *peer_addr = peerInfo.peer_addr;
-  //Serial.print("Sending: "); Serial.println(data);
-  esp_err_t result = esp_now_send(peer_addr, (uint8_t *) &send_data, sizeof(send_data));
-
-  Serial.print("Send Status: ");
-  if (result == ESP_OK) {
-    Serial.println("Successful");
-  } else if (result == ESP_ERR_ESPNOW_NOT_INIT) {
-    // How did we get so far!!
-    Serial.println("ESPNOW not Init.");
-  } else if (result == ESP_ERR_ESPNOW_ARG) {
-    Serial.println("Invalid Argument");
-  } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
-    Serial.println("Internal Error");
-  } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
-    Serial.println("ESP_ERR_ESPNOW_NO_MEM");
-  } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
-    Serial.println("Peer not found.");
-  } else {
-    Serial.println("Not sure what happened");
+// callback when data is sent from Master to receiver
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:  ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  if (status ==0){
+    success = "Delivery Success :)";
   }
+  else{
+    success = "Delivery Fail :(";
+  }
+    char macStr[18]; //^^goes inside OnDataSent | used to debug
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+          mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.print("Last Packet Sent to: "); Serial.println(macStr);
 }
 
-// callback when data is sent from Master to receiver
-// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-//   Serial.print("\r\nLast Packet Send Status:\t");
-//   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-//   if (status ==0){
-//     success = "Delivery Success :)";
-//   }
-//   else{
-//     success = "Delivery Fail :(";
-//   }
-// }
-  //char macStr[18]; //^^goes inside OnDataSent | used to debug
-  //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-  //         mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  //Serial.print("Last Packet Sent to: "); Serial.println(macStr);
-  //Serial.print("Last Packet Send Status: "); Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-  //Serial.println(data);
 
 // callback when data is recv 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int data_len) {
   memcpy(&receive_data, incomingData, sizeof(receive_data));
   Serial.println("Data Received:");
-  receive_faceDetected = receive_data.b;
-  receive_motorControl = receive_data.c;
+  receive_faceDetected = receive_data.faceDetected;
   Serial.print("Face Detected flag: "); Serial.println(receive_faceDetected);
-  Serial.print("Motor Control flag: "); Serial.println(receive_motorControl);
   Serial.println( );
   //char macStr[18];
   //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
@@ -137,28 +111,36 @@ void setup() {
   Serial.println("ESPNow Setup Running");
   InitESPNow();
   // Once ESPNow is successfully Init,register for Send CB of Trasnmitted packet
-  //esp_now_register_send_cb(OnDataSent);
+  esp_now_register_send_cb(OnDataSent);
 
-    // Register peer
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 1;  
+  peerInfo.channel = 0;  
   peerInfo.encrypt = false;
-  
-  // Add peer        
+  // Register first peer
+  memcpy(peerInfo.peer_addr, broadcastAddressB, 6);       
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
+    Serial.println("Failed to add ESP32_B");
     return;
   }
+  // Register first peer
+  memcpy(peerInfo.peer_addr, broadcastAddressC, 6);       
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add ESP32_C");
+    return;
+  }
+
   esp_now_register_recv_cb(OnDataRecv);
 }
 
 void loop() {
   
       send_faceDetected = 1;  //TEST
-      send_motorControl = 3; // TEST
-      send_data.b = send_faceDetected;
-      send_data.c = send_motorControl;
-      sendData(); 
+      //send_motorState = "forward"; // TEST
+      send_motorControl = 1; //TEST
+      strcpy(send_data.myState, "forward");
+      send_data.running = send_motorControl;
+      send_data.faceDetected = send_faceDetected;
+      esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+
     while (Serial2.available() > 0)
     if (gps.encode(Serial2.read()))
       latitude = gps.location.lat();
