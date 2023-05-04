@@ -7,9 +7,16 @@
 #include "fd_forward.h"
 #include "fr_forward.h"
 #include "fr_flash.h"
+//Added:
+//#include <WiFi.h>
+#include "esp_wpa2.h" //wpa2 library for connections to Enterprise networks
 
-const char* ssid = "AndroidAPB7A0";//"NSA";
-const char* password = "ffmc6201";//"Orange";
+#define EAP_IDENTITY "kristella.jackson@student.csulb.edu" //if connecting from another corporation, use identity@organisation.domain in Eduroam  (school email)
+#define EAP_USERNAME "kristella.jackson@student.csulb.edu" //oftentimes just a repeat of the identity (school email)
+#define EAP_PASSWORD "password" //your Eduroam password (school pw. REMEMBER TO REMOVE YOUR PASSWORD HERE AFTERWARDS BEFORE SHARING THIS FILE)
+const char* ssid = "eduroam"; // Eduroam SSID
+//const char* host = "arduino.php5.sk"; //external server domain for HTTP connection after authentification
+int counter = 0;
 
 #define ENROLL_CONFIRM_TIMES 5
 #define FACE_ID_SAVE_NUMBER 7
@@ -25,8 +32,8 @@ camera_fb_t * fb = NULL;
 long current_millis;
 long last_detected_millis = 0;
 
+#define SENDSIGNAL 2
 bool face_recognised = false;
-int success = LOW;
 char successMessage[100];
 
 void app_facenet_main();
@@ -89,6 +96,9 @@ void setup() {
   Serial.setDebugOutput(true);
   Serial.println();
 
+  digitalWrite(SENDSIGNAL, LOW);
+  pinMode(SENDSIGNAL, OUTPUT);
+  
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -120,12 +130,7 @@ void setup() {
     config.jpeg_quality = 12;
     config.fb_count = 1;
   }
-/*
-#if defined(CAMERA_MODEL_ESP_EYE)
-  pinMode(13, INPUT_PULLUP);
-  pinMode(14, INPUT_PULLUP);
-#endif
-*/
+
   // camera init
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -135,16 +140,31 @@ void setup() {
 
   sensor_t * s = esp_camera_sensor_get();
   s->set_framesize(s, FRAMESIZE_QVGA);
-/*
-#if defined(CAMERA_MODEL_M5STACK_WIDE)
-  s->set_vflip(s, 1);
-  s->set_hmirror(s, 1);
-#endif
-*/
-  WiFi.begin(ssid, password);
+
+  delay(10);
+  Serial.println();
+  Serial.print("Connecting to network: ");
+  Serial.println(ssid);
+  WiFi.disconnect(true);  //disconnect form wifi to set new wifi connection
+  esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)EAP_IDENTITY, strlen(EAP_IDENTITY));
+  esp_wifi_sta_wpa2_ent_set_username((uint8_t *)EAP_USERNAME, strlen(EAP_USERNAME));
+  esp_wifi_sta_wpa2_ent_set_password((uint8_t *)EAP_PASSWORD, strlen(EAP_PASSWORD));
+  esp_wpa2_config_t WPAconfig = WPA2_CONFIG_INIT_DEFAULT();
+  esp_wifi_sta_wpa2_ent_enable(&WPAconfig);
+  //esp_wifi_sta_wpa2_ent_enable();
+  WiFi.mode(WIFI_STA); //init wifi mode
+  
+  // Example1 (most common): a cert-file-free eduroam with PEAP (or TTLS)
+  //WiFi.begin(ssid, WPA2_AUTH_PEAP, EAP_IDENTITY, EAP_USERNAME, EAP_PASSWORD);
+  WiFi.begin(ssid);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    counter++;
+    if(counter>=60){ //after 30 seconds timeout - reset board
+      Serial.println("Restarting from 30-sec timeout...");
+      ESP.restart();
+    }
   }
   Serial.println("");
   Serial.println("WiFi connected");
@@ -156,6 +176,8 @@ void setup() {
   Serial.print("Camera Ready! Use 'http://");
   Serial.print(WiFi.localIP());
   Serial.println("' to connect");
+  Serial.print("Wi-Fi Channel: ");
+  Serial.println(WiFi.channel());
 }
 
 static esp_err_t index_handler(httpd_req_t *req) {
@@ -308,8 +330,13 @@ void loop() {
             if (f)
             {
               sprintf(successMessage, "Welcome, %s!\nPlease close this tab and go to menu!", f->id_name);
-              success = HIGH;
+              digitalWrite(SENDSIGNAL, HIGH); 
+              client.send(successMessage);
               /*Send the flag variable value to the main MCU running the main webserver*/
+              g_state = START_STREAM;
+              delay(1000);
+              digitalWrite(SENDSIGNAL, LOW); 
+              //esp_err_t result = esp_now_send(serverAddress, (uint8_t *) &myData, sizeof(myData));              
             }
             else
             {
@@ -337,14 +364,5 @@ void loop() {
 
     esp_camera_fb_return(fb);
     fb = NULL;
-    //Infinite loop indicating successful facial recognition
-    if (success == HIGH){
-      /*Reset the flag for the next time user needs to perform facial recognition*/
-      success = LOW;
-      /*If webserver is still running, this will stay in an infinite loop with no other code besides this message*/
-      while (1){
-        client.send(successMessage);
-      }
-    }
   }
 }
