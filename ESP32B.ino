@@ -45,7 +45,7 @@
 #define TFT_DC         2 
 #define CALIBRATION_FACTOR -449 // Value calculated from calibration of HX711 with known weights
 esp_now_peer_info_t peerInfo;
-#define CHANNEL 1          //ESPNOW
+#define CHANNEL 0         //ESPNOW
 
 // ESP32 GPIO pins used by latch lock:
 #define SOLENOID 15
@@ -63,7 +63,7 @@ HX711 scale; // HX711 library instance for future reference
 Adafruit_BME280 bme; // BME280 library instance for future reference
 
 //MAC Address of your receiver 
-uint8_t broadcastAddress[] = {0x94, 0x3C, 0xC6, 0x32, 0xDD, 0x64};
+uint8_t broadcastAddress[] = {0x94, 0x3C, 0xC6, 0x32, 0xDD, 0x64};  //ESP32_A MAC Address
 
 // Initialize variables
 int weight;
@@ -73,17 +73,17 @@ int lastTemperature;
 int enrollMode = 0;
 //int faceEnrollDetect = 0;
 int lockStatus = 0;
-int unlockRequest = 0;
 int send_faceDetected;
-int send_motorControl;
 int receive_faceDetected;
-int receive_motorControl;
+int receive_unlockRequest = 0;
 String success;
 
 //define data structure
 typedef struct struct_message{
-  int b;
-  int c;
+  char myState[32]; //forward, reverse, left, right, stop, and exit
+  int running; //If HIGH, it's in controller mode. Else, do not move motors at all.
+  int faceDetected; //flag used if successful facial recognition
+  int unlockRequest; //flag used if user presses unlock
 } struct_message;
 
 //create structered data object
@@ -102,61 +102,30 @@ void InitESPNow() {
   }
 }
 
-void sendData() {
-  //data++;
-  const uint8_t *peer_addr = peerInfo.peer_addr;
-  //Serial.print("Sending: "); Serial.println(data);
-  esp_err_t result = esp_now_send(peer_addr, (uint8_t *) &send_data, sizeof(send_data));
-
-  Serial.print("Send Status: ");
-  if (result == ESP_OK) {
-    Serial.println("Successful");
-  } else if (result == ESP_ERR_ESPNOW_NOT_INIT) {
-    // How did we get so far!!
-    Serial.println("ESPNOW not Init.");
-  } else if (result == ESP_ERR_ESPNOW_ARG) {
-    Serial.println("Invalid Argument");
-  } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
-    Serial.println("Internal Error");
-  } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
-    Serial.println("ESP_ERR_ESPNOW_NO_MEM");
-  } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
-    Serial.println("Peer not found.");
-  } else {
-    Serial.println("Not sure what happened");
-  }
-}
 // callback when data is sent from Master to receiver
-// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-//   Serial.print("\r\nLast Packet Send Status:\t");
-//   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-//   if (status ==0){
-//     success = "Delivery Success :)";
-//   }
-//   else{
-//     success = "Delivery Fail :(";
-//   }
-//     //char macStr[18];
-//   //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-//   //         mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-//   //Serial.print("Last Packet Sent to: "); Serial.println(macStr);
-//   //Serial.print("Last Packet Send Status: "); Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-//   //Serial.println(data);
-// }
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:\t");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+  mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.print("Last Packet Sent to: "); Serial.println(macStr);
+}
 
 // callback when data is recv
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int data_len) {
   memcpy(&receive_data, incomingData, sizeof(receive_data));
   Serial.println("Recv Data: ");
-  receive_faceDetected = receive_data.b;
-  receive_motorControl = receive_data.c;
-  Serial.print("Face Detected "); Serial.println(receive_faceDetected);
-  Serial.print("Motor Controls "); Serial.println(receive_motorControl);
+  receive_faceDetected = receive_data.faceDetected;
+  receive_unlockRequest = receive_data.unlockRequest;
+  Serial.print("Face Detected: "); Serial.println(receive_faceDetected);
+  Serial.print("Unlock Request: "); Serial.println(receive_unlockRequest);
   Serial.println( );
-  //char macStr[18];  //used to print out MAC address from transmitting ESP32
-  //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-           //mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  //Serial.print("Last Packet Recv from: "); Serial.println(macStr);
+  char macStr[18];  //used to print out MAC address from transmitting ESP32
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+  mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.print("Last Packet Recv from: "); Serial.println(macStr);
+
 }
 
 void setup() {
@@ -164,13 +133,12 @@ void setup() {
   WiFi.mode(WIFI_STA);
   Serial.println("ESPNow Setup Running");
   InitESPNow();
-  // Once ESPNow is successfully Init, we will register for recv CB to
-  // get recv packer info.
-  //esp_now_register_send_cb(OnDataSent);
+  // Once ESPNow is successfully Init, we will register for recv CB to get recv packer info.
+  esp_now_register_send_cb(OnDataSent);
   
-    // Register peer
+  // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 1;  
+  peerInfo.channel = 0;  
   peerInfo.encrypt = false;
   
   // Add peer        
@@ -215,11 +183,9 @@ void setup() {
 }
 
 void loop() {
-  send_faceDetected = 5; //TEST
-  send_motorControl = 0; //TEST
-  send_data.b = send_faceDetected;
-  send_data.c = send_motorControl;
-  sendData(); 
+  send_faceDetected = 2; //TEST
+  send_data.faceDetected = send_faceDetected;
+  esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
 
   if ((digitalRead(Lswitch) == HIGH) && (lockStatus == 0)) {
     Serial.println("unlocked");
@@ -239,14 +205,14 @@ void loop() {
     tft.setCursor(0, 0);
     tft.println("Hello, [Name]!"); // LCD displays user's saved name
 
-      //unlockRequest = 1; // TEST
-      if (unlockRequest == 1) {       // If user presses unlock button
+      //receive_unlockRequest = 1; // TEST
+      if (receive_unlockRequest == 1) {       // If user presses unlock button
         lockStatus = 0;
         digitalWrite(SOLENOID, HIGH);
         delay(500);
         digitalWrite(SOLENOID, LOW);
         lockStatus = 1;
-        unlockRequest = 0;
+        receive_unlockRequest = 0;
       }
       else {
         tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh 
