@@ -45,9 +45,12 @@ uint8_t broadcastAddressC[] = {0xEC, 0x62, 0x60, 0x1C, 0x89, 0x30}; //ESP32_C EC
 float latitude;
 float longitude;
 char send_motorState;
+char receive_motorState;
 int send_motorControl;
 int send_faceDetected;
+int receive_motorControl;
 int receive_faceDetected;
+int receive_unlockRequest;
 int send_unlockRequest; 
 String success;
 
@@ -127,16 +130,45 @@ void setup() {
 }
 
 void loop() {
-  
-      send_faceDetected = 5;  //TEST
-      //send_motorState = "forward"; // TEST
-      send_motorControl = 7; //TEST
-      send_unlockRequest = 1; //TEST
-      strcpy(send_data.myState, "forward");
-      send_data.running = send_motorControl;
+  if(receive_faceDetected == 1){
       send_data.faceDetected = send_faceDetected;
+      esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  }
+
+  //  if(receive_motorState == "forward" ){
+  //     strcpy(send_data.myState, "forward");
+  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  // }
+  // if(receive_motorState == "reverse" ){
+  //     strcpy(send_data.myState, "reverse");
+  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  // }
+  // if(receive_motorState == "left" ){
+  //     strcpy(send_data.myState, "left");
+  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  // }
+  // if(receive_motorState == "right" ){
+  //     strcpy(send_data.myState, "right");
+  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  // }
+  // if(receive_motorState == "stop" ){
+  //     strcpy(send_data.myState, "stop");
+  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  // }
+  // if(receive_motorState == "exit" ){
+  //     strcpy(send_data.myState, "exit");
+  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  // }
+  if(receive_motorControl == 1 ){
+      send_data.running = send_motorControl;
+      esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  }
+  if(receive_unlockRequest == 1 ){
       send_data.unlockRequest = send_unlockRequest;
       esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  }
+
+      //esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
 
     while (Serial2.available() > 0)
     if (gps.encode(Serial2.read()))
