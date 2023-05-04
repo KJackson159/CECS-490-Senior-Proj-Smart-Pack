@@ -44,10 +44,11 @@ uint8_t broadcastAddressC[] = {0xEC, 0x62, 0x60, 0x1C, 0x89, 0x30}; //ESP32_C EC
 
 float latitude;
 float longitude;
-int send_faceDetected;
 char send_motorState;
 int send_motorControl;
+int send_faceDetected;
 int receive_faceDetected;
+int send_unlockRequest; 
 String success;
 
 //define data structure
@@ -55,6 +56,7 @@ typedef struct struct_message{
   char myState[32]; //forward, reverse, left, right, stop, and exit
   int running; //If HIGH, it's in controller mode. Else, do not move motors at all.
   int faceDetected; //flag used if successful facial recognition
+  int unlockRequest; //flag used if user presses unlock
 } struct_message; 
 
 //create structured data object 
@@ -77,12 +79,6 @@ void InitESPNow() {
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:  ");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-  if (status ==0){
-    success = "Delivery Success :)";
-  }
-  else{
-    success = "Delivery Fail :(";
-  }
     char macStr[18]; //^^goes inside OnDataSent | used to debug
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
@@ -97,17 +93,16 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int data_l
   receive_faceDetected = receive_data.faceDetected;
   Serial.print("Face Detected flag: "); Serial.println(receive_faceDetected);
   Serial.println( );
-  //char macStr[18];
-  //snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-           //mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  //Serial.print("Last Packet Recv from: "); Serial.println(macStr);
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+  mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.print("Last Packet Recv from: "); Serial.println(macStr);
 }
 
 void setup() {
   Serial.begin(115200);
   Serial2.begin(9600);
-  //Set device in STA mode to begin with
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_STA);    //Set device in STA mode to begin with
   Serial.println("ESPNow Setup Running");
   InitESPNow();
   // Once ESPNow is successfully Init,register for Send CB of Trasnmitted packet
@@ -133,12 +128,14 @@ void setup() {
 
 void loop() {
   
-      send_faceDetected = 1;  //TEST
+      send_faceDetected = 5;  //TEST
       //send_motorState = "forward"; // TEST
-      send_motorControl = 1; //TEST
+      send_motorControl = 7; //TEST
+      send_unlockRequest = 1; //TEST
       strcpy(send_data.myState, "forward");
       send_data.running = send_motorControl;
       send_data.faceDetected = send_faceDetected;
+      send_data.unlockRequest = send_unlockRequest;
       esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
 
     while (Serial2.available() > 0)
@@ -152,6 +149,6 @@ void loop() {
     while (true);
   }
 
-  // wait for 3seconds to run the logic again
+  // wait for 5 seconds to run the logic again
   delay(5000);
 }
