@@ -216,6 +216,7 @@ void loop() {
       if (lockStatus == 0) {
         digitalWrite(SOLENOID, HIGH);
         delay(500);
+        digitalWrite(SOLENOID, LOW);
 		  
 		    // Display Smart Lock unlocked on LCD:
         tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh 
@@ -234,6 +235,7 @@ void loop() {
 	    if (exitFlag == 1) {
 	      faceDetectFlag = 0;
         receive_faceDetected = 0;
+        exitFlag = 0;
         tft.fillScreen(ST77XX_BLACK); // Allows screen to refresh
 	    }
 	  }
