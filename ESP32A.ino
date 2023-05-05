@@ -42,11 +42,12 @@ int trigPin = 23;    // TRIG pin
 int echoPin = 22;    // ECHO pin
 int trigPin2 = 21;  // TRIG pin for sensor 2
 int echoPin2 = 5;  //ECHO pin for sensor 2
+int tempSwitch = 34; // temp switch for Face detected flag
 float duration_us, distance_cm, duration_us2, distance_cm2;
 
 //MAC Address of your receiver 
-uint8_t broadcastAddressB[] = {0xCC, 0xDB, 0xA7, 0x51, 0x06, 0x60}; //ESP32_B  CC:DB:A7:51:06:60
-uint8_t broadcastAddressC[] = {0xEC, 0x62, 0x60, 0x1C, 0x89, 0x30}; //ESP32_C EC:62:60:1C:89:30
+uint8_t broadcastAddressB[] = {0xEC, 0x62, 0x60, 0x76, 0xBD, 0x18}; //ESP32_B  EC:62:60:76:BD:18  LCD, WEIGHT, TEMP, LOCK
+uint8_t broadcastAddressC[] = {0xC8, 0xF0, 0x9E, 0x9F, 0x47, 0x38}; //ESP32_C C8:F0:9E:9F:47:38  MOTOR CONTROLLER 
 
 float latitude;
 float longitude;
@@ -146,6 +147,7 @@ void loop() {
   if(receive_faceDetected == 1){
       send_data.faceDetected = send_faceDetected;
       esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+      receive_faceDetected = 0;    //hard coded to a switch since ESP32CAM having issues 
   }
 
   //  if(receive_motorState == "forward" ){
@@ -181,7 +183,9 @@ void loop() {
       esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
   }
 
-      //esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  if(tempSwitch = HIGH){
+      receive_faceDetected = 1;    //hard coded to a switch since ESP32CAM having issues 
+  }
 
     while (Serial2.available() > 0)
     if (gps.encode(Serial2.read()))
