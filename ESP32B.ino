@@ -190,12 +190,12 @@ void loop() {
   if ((digitalRead(Lswitch) == HIGH) && (lockStatus == 0)) {
     Serial.println("unlocked");
     lockStatus = 1;
-    delay(5000);
+    delay(500);
   }
   if ((digitalRead(Lswitch) == LOW) && (lockStatus == 1)) {
     Serial.println("locked");
     lockStatus = 0;
-    delay(1000);
+    delay(500);
   } 
 
   //receive_faceDetected = 1; // TEST
@@ -228,8 +228,6 @@ void loop() {
 		    delay(3000); // Display unlock text for 3 seconds
 		    lockStatus = 1;
       }
-
-      delay(5000);
       exitFlag = 1;
 	    // Exit Menu when user presses Exit button:
 	    if (exitFlag == 1) {
