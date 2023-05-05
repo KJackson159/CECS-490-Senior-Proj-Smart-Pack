@@ -28,9 +28,11 @@
 
 // Setting PWM properties
 #define FREQ 90000
-#define PWM_CH 0
+#define PWM_CHF 0 //channel for front wheels
+#define PWM_CHR 1 //channel for back right wheel
+#define PWM_CHL 2 //channel for back left wheel
 #define RES   8
-int dutyCycle = 130; // x / 255 = duty cycle %
+int initduty = 255; // x / 255 = duty cycle %
 
 void setup() {
   // sets the pins as outputs:
@@ -52,12 +54,14 @@ void setup() {
   pinMode(MOTOR_D_EN, OUTPUT);
   
   // configure LED PWM functionalitites
-  ledcSetup(PWM_CH, FREQ, RES);
+  ledcSetup(PWM_CHF, FREQ, RES);
+  ledcSetup(PWM_CHR, FREQ, RES);
+  ledcSetup(PWM_CHL, FREQ, RES);
   // attach the channel to the GPIO to be controlled
-  ledcAttachPin(MOTOR_A_EN, PWM_CH);
-  ledcAttachPin(MOTOR_B_EN, PWM_CH);
-  ledcAttachPin(MOTOR_C_EN, PWM_CH);
-  ledcAttachPin(MOTOR_D_EN, PWM_CH);
+  ledcAttachPin(MOTOR_A_EN, PWM_CHF);
+  ledcAttachPin(MOTOR_B_EN, PWM_CHF);
+  ledcAttachPin(MOTOR_C_EN, PWM_CHR);
+  ledcAttachPin(MOTOR_D_EN, PWM_CHL);
   
   Serial.begin(115200);
   Serial.println("Testing DC Motors.");
@@ -65,10 +69,10 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  ledcWrite(PWM_CH, dutyCycle);
-  
   // Move the DC motor forward at maximum speed
+  ledcWrite(PWM_CHF, initduty);
+  ledcWrite(PWM_CHR, initduty);
+  ledcWrite(PWM_CHL, initduty);
   Serial.print("Forward: ");
   digitalWrite(MOTOR_A_PIN1, HIGH);
   digitalWrite(MOTOR_A_PIN2, LOW); 
@@ -79,16 +83,7 @@ void loop() {
   digitalWrite(MOTOR_C_PIN2, LOW); 
   digitalWrite(MOTOR_D_PIN1, HIGH);
   digitalWrite(MOTOR_D_PIN2, LOW); 
-  /* 
-  Serial.print(digitalRead(MOTOR_A_PIN1)); 
-  Serial.print(digitalRead(MOTOR_A_PIN2));
-  Serial.print(digitalRead(MOTOR_B_PIN1));
-  Serial.print(digitalRead(MOTOR_B_PIN2));
-  Serial.print(digitalRead(MOTOR_C_PIN1)); 
-  Serial.print(digitalRead(MOTOR_C_PIN2));
-  Serial.print(digitalRead(MOTOR_D_PIN1));
-  Serial.println(digitalRead(MOTOR_D_PIN2));
-  delay(3000);
+  delay(2500);
 
   //Stop
   Serial.print("pause1: ");
@@ -101,16 +96,7 @@ void loop() {
   digitalWrite(MOTOR_C_PIN2, LOW);
   digitalWrite(MOTOR_D_PIN1, LOW);  
   digitalWrite(MOTOR_D_PIN2, LOW);
-  
-  Serial.print(digitalRead(MOTOR_A_PIN1)); 
-  Serial.print(digitalRead(MOTOR_A_PIN2));
-  Serial.print(digitalRead(MOTOR_B_PIN1));
-  Serial.print(digitalRead(MOTOR_B_PIN2));
-  Serial.print(digitalRead(MOTOR_C_PIN1)); 
-  Serial.print(digitalRead(MOTOR_C_PIN2));
-  Serial.print(digitalRead(MOTOR_D_PIN1));
-  Serial.println(digitalRead(MOTOR_D_PIN2));
-  delay(2000);
+  delay(1000);
     
   // Move DC motor backwards at maximum speed
   Serial.print("Backward: ");
@@ -123,16 +109,7 @@ void loop() {
   digitalWrite(MOTOR_C_PIN2, HIGH); 
   digitalWrite(MOTOR_D_PIN1, LOW);
   digitalWrite(MOTOR_D_PIN2, HIGH); 
-  
-  Serial.print(digitalRead(MOTOR_A_PIN1)); 
-  Serial.print(digitalRead(MOTOR_A_PIN2));
-  Serial.print(digitalRead(MOTOR_B_PIN1));
-  Serial.print(digitalRead(MOTOR_B_PIN2));
-  Serial.print(digitalRead(MOTOR_C_PIN1)); 
-  Serial.print(digitalRead(MOTOR_C_PIN2));
-  Serial.print(digitalRead(MOTOR_D_PIN1));
-  Serial.println(digitalRead(MOTOR_D_PIN2));
-  delay(3000);
+  delay(2500);
   
   // Stop the DC motor
   Serial.print("pause2: ");
@@ -145,15 +122,58 @@ void loop() {
   digitalWrite(MOTOR_C_PIN2, LOW);
   digitalWrite(MOTOR_D_PIN1, LOW);  
   digitalWrite(MOTOR_D_PIN2, LOW);
+  delay(1000);
+
+  Serial.print("CW: ");
+  ledcWrite(PWM_CHR, 150);
+  digitalWrite(MOTOR_A_PIN1, HIGH);
+  digitalWrite(MOTOR_A_PIN2, LOW); 
+  digitalWrite(MOTOR_B_PIN1, HIGH);
+  digitalWrite(MOTOR_B_PIN2, LOW); 
   
-  Serial.print(digitalRead(MOTOR_A_PIN1)); 
-  Serial.print(digitalRead(MOTOR_A_PIN2));
-  Serial.print(digitalRead(MOTOR_B_PIN1));
-  Serial.print(digitalRead(MOTOR_B_PIN2));
-  Serial.print(digitalRead(MOTOR_C_PIN1)); 
-  Serial.print(digitalRead(MOTOR_C_PIN2));
-  Serial.print(digitalRead(MOTOR_D_PIN1));
-  Serial.println(digitalRead(MOTOR_D_PIN2));
-  delay(2000);*/
+  digitalWrite(MOTOR_C_PIN1, HIGH);
+  digitalWrite(MOTOR_C_PIN2, LOW); 
+  digitalWrite(MOTOR_D_PIN1, HIGH);
+  digitalWrite(MOTOR_D_PIN2, LOW); 
+  delay(2500);
+
+  //Stop
+  Serial.print("pause3: ");
+  digitalWrite(MOTOR_A_PIN1, LOW);
+  digitalWrite(MOTOR_A_PIN2, LOW);
+  digitalWrite(MOTOR_B_PIN1, LOW);  
+  digitalWrite(MOTOR_B_PIN2, LOW);
+
+  digitalWrite(MOTOR_C_PIN1, LOW);
+  digitalWrite(MOTOR_C_PIN2, LOW);
+  digitalWrite(MOTOR_D_PIN1, LOW);  
+  digitalWrite(MOTOR_D_PIN2, LOW);
+  delay(1000);
+
+  Serial.print("CCW: ");
+  ledcWrite(PWM_CHL, 150);
+  digitalWrite(MOTOR_A_PIN1, HIGH);
+  digitalWrite(MOTOR_A_PIN2, LOW); 
+  digitalWrite(MOTOR_B_PIN1, HIGH);
+  digitalWrite(MOTOR_B_PIN2, LOW); 
+  
+  digitalWrite(MOTOR_C_PIN1, HIGH);
+  digitalWrite(MOTOR_C_PIN2, LOW); 
+  digitalWrite(MOTOR_D_PIN1, HIGH);
+  digitalWrite(MOTOR_D_PIN2, LOW); 
+  delay(2500);
+
+  //Stop
+  Serial.print("pause4: ");
+  digitalWrite(MOTOR_A_PIN1, LOW);
+  digitalWrite(MOTOR_A_PIN2, LOW);
+  digitalWrite(MOTOR_B_PIN1, LOW);  
+  digitalWrite(MOTOR_B_PIN2, LOW);
+
+  digitalWrite(MOTOR_C_PIN1, LOW);
+  digitalWrite(MOTOR_C_PIN2, LOW);
+  digitalWrite(MOTOR_D_PIN1, LOW);  
+  digitalWrite(MOTOR_D_PIN2, LOW);
+  delay(1000);
 }
 
