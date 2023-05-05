@@ -38,6 +38,12 @@ esp_now_peer_info_t peerInfo;
 TinyGPSPlus gps;
 #define CHANNEL 0
 
+int trigPin = 23;    // TRIG pin
+int echoPin = 22;    // ECHO pin
+int trigPin2 = 21;  // TRIG pin for sensor 2
+int echoPin2 = 5;  //ECHO pin for sensor 2
+float duration_us, distance_cm, duration_us2, distance_cm2;
+
 //MAC Address of your receiver 
 uint8_t broadcastAddressB[] = {0xCC, 0xDB, 0xA7, 0x51, 0x06, 0x60}; //ESP32_B  CC:DB:A7:51:06:60
 uint8_t broadcastAddressC[] = {0xEC, 0x62, 0x60, 0x1C, 0x89, 0x30}; //ESP32_C EC:62:60:1C:89:30
@@ -127,6 +133,13 @@ void setup() {
   }
 
   esp_now_register_recv_cb(OnDataRecv);
+      // configure the trigger pin to output mode
+  pinMode(trigPin, OUTPUT);
+  pinMode(trigPin2, OUTPUT);
+  
+  // configure the echo pin to input mode
+  pinMode(echoPin, INPUT);
+  pinMode(echoPin2, INPUT);
 }
 
 void loop() {
@@ -141,7 +154,7 @@ void loop() {
   // }
   // if(receive_motorState == "reverse" ){
   //     strcpy(send_data.myState, "reverse");
-  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  //     esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));    
   // }
   // if(receive_motorState == "left" ){
   //     strcpy(send_data.myState, "left");
@@ -180,7 +193,38 @@ void loop() {
     Serial.println(F("No GPS detected: check wiring."));
     while (true);
   }
+  // generate 10-microsecond pulse to TRIG pin
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
 
+  // measure duration of pulse from ECHO pin
+  duration_us = pulseIn(echoPin, HIGH);
+
+  // calculate the distance
+  distance_cm = 0.017 * duration_us;
+
+  // generate 10-microsecond pulse to TRIG pin 2
+  digitalWrite(trigPin2, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin2, LOW);
+
+  duration_us2 = pulseIn(echoPin2, HIGH);
+  distance_cm2 = 0.017 * duration_us2;
+
+  // print the distance values to Serial Monitor
+  Serial.print("Distance: ");
+  Serial.print(distance_cm);
+  Serial.print(" cm, Distance 2: ");
+  Serial.print(distance_cm2);
+  Serial.print(" cm");
+
+   // check if obstacle is detected
+  if (distance_cm < 10 || distance_cm2 < 10) {
+    Serial.println(" - OBSTACLE DETECTED!");
+      strcpy(send_data.myState, "stop");
+      esp_err_t result = esp_now_send(0, (uint8_t *) &send_data, sizeof(send_data));
+  }
   // wait for 5 seconds to run the logic again
   delay(5000);
 }
